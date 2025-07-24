@@ -18,17 +18,27 @@ A simple npm package that fetches Claude Code daily usage statistics in JSON for
 
 ## Installation
 
+### Install from npm (when published)
+
 ```bash
-npm install ccusage-gcp-bucket
+npm install -g ccusage-gcp-bucket
 ```
 
-Or clone and install locally:
+### Install locally without publishing
 
 ```bash
+# Clone the repository
 git clone https://github.com/idoyudha/ccusage-gcp-bucket.git
 cd ccusage-gcp-bucket
-npm install
+
+# Install globally from local directory
+npm install -g .
+
+# Or use npm link for development
+npm link
 ```
+
+After local installation, the `ccusage-gcp` command will be available globally.
 
 ## Configuration
 
