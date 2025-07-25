@@ -90,15 +90,6 @@ node index.js --date 20250723
 ccusage-gcp
 ```
 
-## Schedule Configuration
-
-The schedule uses cron syntax. Common examples:
-
-- `0 17 * * *` - 5:00 PM daily (default)
-- `0 9 * * *` - 9:00 AM daily
-- `0 */6 * * *` - Every 6 hours
-- `0 12 * * 1-5` - 12:00 PM on weekdays
-
 ## Output Format
 
 Usage data is saved as JSON files with the filename format:
