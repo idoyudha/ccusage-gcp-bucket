@@ -56,10 +56,6 @@ GCP_PROJECT_ID=your-project-id
 GCP_BUCKET_NAME=your-bucket-name
 GCP_KEY_FILE=./service-account-key.json
 ACCOUNT_NAME=your.email@example.com
-
-# Schedule Configuration (optional)
-# Default is 5:00 PM (17:00) daily
-SCHEDULE_TIME=0 17 * * *
 ```
 
 3. Place your Google Cloud service account key file in the project directory (or update the path in `.env`)

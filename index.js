@@ -28,7 +28,9 @@ function getLastWeekRange() {
   const dayOfWeek = today.getDay();
   
   // Calculate days to last Sunday (start of last week)
-  const daysToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
+  // If today is Sunday (0), we need to go back 7 days to get last Sunday
+  // Otherwise, go back current day + 7 days
+  const daysToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek + 7;
   const lastSunday = new Date(today);
   lastSunday.setDate(today.getDate() - daysToLastSunday);
   
@@ -43,25 +45,25 @@ function getLastWeekRange() {
 }
 
 // Function to run ccusage and get JSON output for a date range
-async function getClaudeUsageJSON(startDate, endDate) {
+async function getClaudeUsageJSON(startDate, endDate, type = 'daily') {
   try {
     const startStr = formatDate(startDate);
     const endStr = formatDate(endDate);
-    console.log(`Fetching Claude Code usage from ${startStr} to ${endStr}...`);
+    console.log(`Fetching Claude Code ${type} usage from ${startStr} to ${endStr}...`);
     
-    const command = `ccusage daily --since ${startStr} --until ${endStr} --json`;
+    const command = `ccusage ${type} --since ${startStr} --until ${endStr} --json`;
     console.log(`Running: ${command}`);
     
     const output = execSync(command, { encoding: 'utf8' });
     return output;
   } catch (error) {
-    console.error('Error fetching usage data:', error.message);
+    console.error(`Error fetching ${type} usage data:`, error.message);
     throw error;
   }
 }
 
 // Function to upload to GCS
-async function uploadToGCS(data, startDate, endDate) {
+async function uploadToGCS(data, startDate, endDate, type = 'daily') {
   const startStr = formatDate(startDate);
   const endStr = formatDate(endDate);
   const fileName = `weekly-${startStr}-to-${endStr}-${accountName}.json`;
@@ -75,6 +77,10 @@ async function uploadToGCS(data, startDate, endDate) {
     actualBucketName = parts[0];
     folderPath = parts.slice(1).join('/') + '/';
   }
+  
+  // Add DAILY or SESSION folder based on type
+  const typeFolder = type === 'session' ? 'SESSION' : 'DAILY';
+  folderPath = folderPath + typeFolder + '/';
   
   // Create the actual bucket object with just the bucket name
   const actualBucket = storage.bucket(actualBucketName);
@@ -90,6 +96,7 @@ async function uploadToGCS(data, startDate, endDate) {
           reportStartDate: startStr,
           reportEndDate: endStr,
           accountName: accountName,
+          reportType: type,
           uploadedAt: new Date().toISOString()
         }
       }
@@ -109,19 +116,35 @@ async function fetchAndUploadWeeklyUsage() {
     
     console.log(`[${new Date().toISOString()}] Starting weekly usage collection from ${formatDate(startDate)} to ${formatDate(endDate)}...`);
     
-    const usageData = await getClaudeUsageJSON(startDate, endDate);
+    // Fetch both daily and session data
+    console.log('Fetching daily usage data...');
+    const dailyUsageData = await getClaudeUsageJSON(startDate, endDate, 'daily');
     
-    // Parse the JSON and add account field
-    const usageJSON = JSON.parse(usageData);
-    const modifiedJSON = {
+    console.log('Fetching session usage data...');
+    const sessionUsageData = await getClaudeUsageJSON(startDate, endDate, 'session');
+    
+    // Parse and modify daily data
+    const dailyUsageJSON = JSON.parse(dailyUsageData);
+    const modifiedDailyJSON = {
       account: accountName,
-      ...usageJSON
+      ...dailyUsageJSON
     };
+    const modifiedDailyData = JSON.stringify(modifiedDailyJSON, null, 2);
     
-    // Convert back to string for upload
-    const modifiedData = JSON.stringify(modifiedJSON, null, 2);
+    // Parse and modify session data
+    const sessionUsageJSON = JSON.parse(sessionUsageData);
+    const modifiedSessionJSON = {
+      account: accountName,
+      ...sessionUsageJSON
+    };
+    const modifiedSessionData = JSON.stringify(modifiedSessionJSON, null, 2);
     
-    await uploadToGCS(modifiedData, startDate, endDate);
+    // Upload both files
+    console.log('Uploading daily usage data...');
+    await uploadToGCS(modifiedDailyData, startDate, endDate, 'daily');
+    
+    console.log('Uploading session usage data...');
+    await uploadToGCS(modifiedSessionData, startDate, endDate, 'session');
     
     console.log(`[${new Date().toISOString()}] Process completed successfully`);
   } catch (error) {
