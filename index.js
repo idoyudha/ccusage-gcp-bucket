@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-const cron = require('node-cron');
 const { Storage } = require('@google-cloud/storage');
 const { execSync } = require('child_process');
 require('dotenv').config();
@@ -23,18 +22,34 @@ function formatDate(date) {
   return `${year}${month}${day}`;
 }
 
-// Function to get today's date
-function getTodayDate() {
-  return new Date();
+// Function to get last week's Sunday to Saturday range
+function getLastWeekRange() {
+  const today = new Date();
+  const dayOfWeek = today.getDay();
+  
+  // Calculate days to last Sunday (start of last week)
+  const daysToLastSunday = dayOfWeek === 0 ? 7 : dayOfWeek;
+  const lastSunday = new Date(today);
+  lastSunday.setDate(today.getDate() - daysToLastSunday);
+  
+  // Calculate last Saturday (end of last week)
+  const lastSaturday = new Date(lastSunday);
+  lastSaturday.setDate(lastSunday.getDate() + 6);
+  
+  return {
+    startDate: lastSunday,
+    endDate: lastSaturday
+  };
 }
 
-// Function to run ccusage and get JSON output
-async function getClaudeUsageJSON(targetDate) {
+// Function to run ccusage and get JSON output for a date range
+async function getClaudeUsageJSON(startDate, endDate) {
   try {
-    const dateStr = formatDate(targetDate);
-    console.log(`Fetching Claude Code usage for ${dateStr}...`);
+    const startStr = formatDate(startDate);
+    const endStr = formatDate(endDate);
+    console.log(`Fetching Claude Code usage from ${startStr} to ${endStr}...`);
     
-    const command = `ccusage daily --since ${dateStr} --until ${dateStr} --json`;
+    const command = `ccusage daily --since ${startStr} --until ${endStr} --json`;
     console.log(`Running: ${command}`);
     
     const output = execSync(command, { encoding: 'utf8' });
@@ -46,9 +61,10 @@ async function getClaudeUsageJSON(targetDate) {
 }
 
 // Function to upload to GCS
-async function uploadToGCS(data, targetDate) {
-  const dateStr = formatDate(targetDate);
-  const fileName = `${dateStr}-${accountName}.json`;
+async function uploadToGCS(data, startDate, endDate) {
+  const startStr = formatDate(startDate);
+  const endStr = formatDate(endDate);
+  const fileName = `weekly-${startStr}-to-${endStr}-${accountName}.json`;
   
   // Check if bucket name includes a path
   let actualBucketName = bucketName;
@@ -71,7 +87,8 @@ async function uploadToGCS(data, targetDate) {
       metadata: {
         contentType: 'application/json',
         metadata: {
-          reportDate: dateStr,
+          reportStartDate: startStr,
+          reportEndDate: endStr,
           accountName: accountName,
           uploadedAt: new Date().toISOString()
         }
@@ -85,16 +102,26 @@ async function uploadToGCS(data, targetDate) {
   }
 }
 
-// Main function to fetch and upload usage
-async function fetchAndUploadUsage(targetDate = null) {
+// Main function to fetch and upload weekly usage
+async function fetchAndUploadWeeklyUsage() {
   try {
-    // If no date specified, use today
-    const dateToProcess = targetDate || getTodayDate();
+    const { startDate, endDate } = getLastWeekRange();
     
-    console.log(`[${new Date().toISOString()}] Starting usage collection for ${formatDate(dateToProcess)}...`);
+    console.log(`[${new Date().toISOString()}] Starting weekly usage collection from ${formatDate(startDate)} to ${formatDate(endDate)}...`);
     
-    const usageData = await getClaudeUsageJSON(dateToProcess);
-    await uploadToGCS(usageData, dateToProcess);
+    const usageData = await getClaudeUsageJSON(startDate, endDate);
+    
+    // Parse the JSON and add account field
+    const usageJSON = JSON.parse(usageData);
+    const modifiedJSON = {
+      account: accountName,
+      ...usageJSON
+    };
+    
+    // Convert back to string for upload
+    const modifiedData = JSON.stringify(modifiedJSON, null, 2);
+    
+    await uploadToGCS(modifiedData, startDate, endDate);
     
     console.log(`[${new Date().toISOString()}] Process completed successfully`);
   } catch (error) {
@@ -103,57 +130,24 @@ async function fetchAndUploadUsage(targetDate = null) {
   }
 }
 
-// Function to start the scheduler
-function startScheduler() {
-  const scheduleTime = process.env.SCHEDULE_TIME || '0 17 * * *'; // Default to 5:00 PM
-  
-  console.log(`Scheduler started. Will run at ${process.env.SCHEDULE_TIME || '5:00 PM'} daily.`);
-  console.log(`Using cron expression: ${scheduleTime}`);
+// Function to run weekly usage collection on startup
+async function runOnStartup() {
+  console.log(`Running weekly usage collection on startup...`);
   console.log(`Account name: ${accountName}`);
   
-  // Schedule the task
-  cron.schedule(scheduleTime, () => {
-    fetchAndUploadUsage();
-  });
-
-  // Keep the process running
-  process.on('SIGINT', () => {
-    console.log('Scheduler stopped.');
-    process.exit(0);
-  });
-}
-
-// Parse command line arguments
-const args = process.argv.slice(2);
-
-if (args.includes('--now')) {
-  // Run for today if --now is specified
-  const today = new Date();
-  fetchAndUploadUsage(today).then(() => {
-    process.exit(0);
-  }).catch(() => {
-    process.exit(1);
-  });
-} else if (args.includes('--date')) {
-  // Run for specific date if --date YYYYMMDD is specified
-  const dateIndex = args.indexOf('--date');
-  if (dateIndex !== -1 && args[dateIndex + 1]) {
-    const dateStr = args[dateIndex + 1];
-    const year = parseInt(dateStr.substring(0, 4));
-    const month = parseInt(dateStr.substring(4, 6)) - 1;
-    const day = parseInt(dateStr.substring(6, 8));
-    const targetDate = new Date(year, month, day);
-    
-    fetchAndUploadUsage(targetDate).then(() => {
-      process.exit(0);
-    }).catch(() => {
-      process.exit(1);
-    });
-  } else {
-    console.error('Please provide date in YYYYMMDD format after --date');
-    process.exit(1);
+  try {
+    await fetchAndUploadWeeklyUsage();
+    console.log('Weekly usage collection completed successfully.');
+  } catch (error) {
+    console.error('Failed to collect weekly usage on startup:', error.message);
   }
-} else {
-  // Start the scheduler
-  startScheduler();
 }
+
+// Run weekly collection on startup
+runOnStartup().then(() => {
+  console.log('Startup task completed.');
+  process.exit(0);
+}).catch((error) => {
+  console.error('Startup task failed:', error);
+  process.exit(1);
+});
