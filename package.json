@@ -9,9 +9,7 @@
   "scripts": {
     "start": "node index.js",
     "upload-now": "node index.js --now",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "postinstall": "echo 'Run npm run setup-startup to enable automatic startup'",
-    "setup-startup": "./scripts/install-service.sh"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",

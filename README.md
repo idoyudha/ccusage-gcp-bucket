@@ -1,14 +1,18 @@
 # ccusage-gcp-bucket
 
-A simple npm package that fetches Claude Code daily usage statistics in JSON format using [ccusage](https://www.npmjs.com/package/ccusage) and uploads them to a Google Cloud Storage bucket.
+A simple npm package that fetches Claude Code usage statistics in JSON format using [ccusage](https://www.npmjs.com/package/ccusage) and uploads them to a Google Cloud Storage bucket.
 
 ## Features
 
-- Automated daily upload of Claude Code usage statistics in JSON format
-- Configurable scheduling (default: 5:00 PM local time)
+- Automated daily and weekly upload of Claude Code usage statistics in JSON format
 - Google Cloud Storage integration
-- Manual upload options with `--now` (today) or `--date YYYYMMDD` (specific date)
-- Automatic filename generation: `YYYYMMDD-account.name.json`
+- Manual upload options:
+  - `--now` for today's usage
+  - `--date YYYYMMDD` for specific date
+  - `--weekly` for last week's usage (Sunday to Saturday)
+- Automatic filename generation:
+  - Daily: `YYYYMMDD-account.name.json`
+  - Weekly: `YYYYMMDD-YYYYMMDD-weekly-account.name.json`
 
 ## Prerequisites
 
@@ -62,53 +66,51 @@ ACCOUNT_NAME=your.email@example.com
 
 ## Usage
 
-### Start the scheduler (runs continuously)
-
-```bash
-npm start
-# or
-node index.js
-```
-
-### Upload today's usage data immediately
+### Upload today's usage data
 
 ```bash
 npm run upload-now
 # or
 node index.js --now
+# or (after global install)
+ccusage-gcp --now
 ```
 
 ### Upload usage data for a specific date
 
 ```bash
 node index.js --date 20250723
+# or (after global install)
+ccusage-gcp --date 20250723
 ```
 
-### Use as a global command (after npm install -g)
+### Upload last week's usage data
 
 ```bash
-ccusage-gcp
+node index.js --weekly
+# or (after global install)
+ccusage-gcp --weekly
 ```
 
 ## Output Format
 
-Usage data is saved as JSON files with the filename format:
+Usage data is saved as JSON files with the following filename formats:
+
+### Daily usage:
 ```
 YYYYMMDD-account.name.json
 ```
 
+### Weekly usage:
+```
+YYYYMMDD-YYYYMMDD-weekly-account.name.json
+```
+
 For example:
-- `20250723-john.doe@example.com.json`
-- `20250724-john.doe@example.com.json`
+- Daily: `20250723-john.doe@example.com.json`
+- Weekly: `20250714-20250720-weekly-john.doe@example.com.json`
 
-Each file contains the JSON output from the `ccusage daily` command for the specific date.
-
-## Scheduling Notes
-
-When running on a schedule, the package will fetch **today's** usage data. For example:
-- If scheduled to run at 5:00 PM on July 24th, it will fetch and upload usage data for July 24th
-- Use `--now` to manually fetch today's current usage data
-- Use `--date YYYYMMDD` to fetch data for any specific date
+Each file contains the JSON output from the `ccusage` command for the specific period.
 
 ## License
 
